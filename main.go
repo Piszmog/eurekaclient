@@ -1,71 +1,61 @@
 package main
 
 import (
-	"encoding/xml"
 	"fmt"
 	"github.com/Piszmog/eurekaclient/eureka"
 	"github.com/Piszmog/httpclient"
-	"io/ioutil"
-	"net/http"
 	"os"
-	"strings"
 	"time"
 )
 
 func main() {
 	hostname, _ := os.Hostname()
 	instance := eureka.CreateInstance("testapp", 8080)
-	client := httpclient.CreateDefaultHttpClient()
-	const baseUrl = "http://localhost:8761"
-	request, _ := http.NewRequest("PUT", baseUrl+"/eureka/apps/TESTAPP/"+hostname+":testapp", nil)
-	resp, _ := client.Do(request)
-	if resp.StatusCode != 404 {
-		panic("sent a successful heartbeat")
+	httpClient := httpclient.CreateDefaultHttpClient()
+	fmt.Println("registering app")
+	client := eureka.CreateLocalClient("http://localhost:8761", "testapp", hostname, httpClient)
+	err := client.Register(instance)
+	if err != nil {
+		panic(err)
 	}
-	xmlString, _ := xml.Marshal(instance)
-	s := string(xmlString)
-	if xmlString == nil {
-		panic("fail")
-	}
-	resp, _ = client.Post(baseUrl+"/eureka/apps/TESTAPP", "application/xml", strings.NewReader(s))
-	if resp.StatusCode != 204 {
-		panic("failed to get 204")
-	}
-	defer deleteApp(nil, baseUrl, resp, client, hostname)
+	fmt.Println("successful register")
+	defer deleteApp(client)
 	time.Sleep(2 * time.Second)
-	request, _ = http.NewRequest("PUT", baseUrl+"/eureka/apps/TESTAPP/"+hostname+":testapp", nil)
-	resp, _ = client.Do(request)
-	if resp.StatusCode != 200 {
-		panic("failed to send a successful heartbeat")
+	fmt.Println("sending heartbeat")
+	err = client.Heartbeat()
+	if err != nil {
+		panic(err)
 	}
-	resp, _ = client.Get(baseUrl + "/eureka/apps")
-	if resp.StatusCode != 200 {
-		panic("failed to get 200")
+	fmt.Println("sent heartbeat")
+	time.Sleep(2 * time.Second)
+	fmt.Println("retrieving all apps")
+	applications, err := client.GetAllApps()
+	if err != nil {
+		panic(err)
 	}
-	bytes, _ := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	fmt.Printf("Response %s\n", string(bytes))
-
-	resp, _ = client.Get(baseUrl + "/eureka/apps/TESTAPP")
-	if resp.StatusCode != 200 {
-		panic("failed to get 200")
+	fmt.Printf("Response %+v\n", applications)
+	time.Sleep(2 * time.Second)
+	fmt.Println("retrieving instances")
+	application, err := client.GetAppInstances("testapp")
+	if err != nil {
+		panic(err)
 	}
-	bytes, _ = ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	fmt.Printf("Response %s\n", string(bytes))
+	fmt.Printf("Response %+v\n", application)
 }
 
-func deleteApp(request *http.Request, baseUrl string, resp *http.Response, client *http.Client, hostname string) {
+func deleteApp(client eureka.Client) {
 	time.Sleep(2 * time.Second)
-	request, _ = http.NewRequest("PUT", baseUrl+"/eureka/apps/TESTAPP/"+hostname+":testapp/status?value=DOWN", nil)
-	resp, _ = client.Do(request)
-	if resp.StatusCode != 200 {
-		panic("failed to update the status to DOWN")
+	fmt.Println("updating status to DOWN")
+	err := client.UpdateStatus(eureka.Down)
+	if err != nil {
+		panic(err)
 	}
+	fmt.Println("updated status")
 	time.Sleep(10 * time.Second)
-	request, _ = http.NewRequest("DELETE", baseUrl+"/eureka/apps/TESTAPP/"+hostname+":testapp", nil)
-	resp, _ = client.Do(request)
-	if resp.StatusCode != 200 {
-		panic("failed to get 200, got " + resp.Status)
+	fmt.Println("canceling instance")
+	err = client.CancelInstance()
+	if err != nil {
+		panic(err)
 	}
+	fmt.Println("cancelled instance")
 }
