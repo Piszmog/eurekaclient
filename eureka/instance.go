@@ -2,7 +2,6 @@ package eureka
 
 import (
 	"encoding/xml"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -71,8 +70,7 @@ type LeaseInfo struct {
 	ServiceUpTimestamp    int `xml:"serviceUpTimestamp"`
 }
 
-func CreateInstance(appName string, port int) Instance {
-	hostname, _ := os.Hostname()
+func CreateInstance(appName, hostname, instanceId string, port int) Instance {
 	return Instance{
 		HostName:         hostname,
 		Port:             port,
@@ -81,7 +79,7 @@ func CreateInstance(appName string, port int) Instance {
 		VIPAddress:       appName,
 		SecureVIPAddress: appName,
 		Application:      strings.ToUpper(appName),
-		InstanceId:       hostname + ":" + appName,
+		InstanceId:       instanceId,
 		HomePageURL:      "http://" + hostname + ":" + strconv.Itoa(8080),
 		DataCenterInfo: DataCenterInfo{
 			Name: MyOwn,
