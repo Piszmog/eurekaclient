@@ -2,6 +2,8 @@ package eureka
 
 import (
 	"encoding/xml"
+	"github.com/Piszmog/eurekaclient/net"
+	"github.com/pkg/errors"
 	"strconv"
 	"strings"
 )
@@ -70,17 +72,22 @@ type LeaseInfo struct {
 	ServiceUpTimestamp    int `xml:"serviceUpTimestamp"`
 }
 
-func CreateInstance(appName, hostname, instanceId string, port int) Instance {
-	return Instance{
+func CreateInstance(appName, hostname, instanceId string, port int) (*Instance, error) {
+	ipAddress, err := net.FindFirstNonLoopBackIPAddress()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to find an IP address")
+	}
+	// todo - port, secure port, countryId, how to set homepage/status page, healthcheck page
+	return &Instance{
 		HostName:         hostname,
 		Port:             port,
 		Status:           Up,
-		IPAddress:        "127.0.0.1",
+		IPAddress:        ipAddress.String(),
 		VIPAddress:       appName,
 		SecureVIPAddress: appName,
 		Application:      strings.ToUpper(appName),
 		InstanceId:       instanceId,
-		HomePageURL:      "http://" + hostname + ":" + strconv.Itoa(8080),
+		HomePageURL:      "http://" + hostname + ":" + strconv.Itoa(port),
 		DataCenterInfo: DataCenterInfo{
 			Name: MyOwn,
 		},
@@ -88,5 +95,5 @@ func CreateInstance(appName, hostname, instanceId string, port int) Instance {
 			RenewalIntervalInSecs: 30,
 			DurationInSecs:        90,
 		},
-	}
+	}, nil
 }

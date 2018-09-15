@@ -50,7 +50,10 @@ func CreateApplicationInstance(baseUrl, appName, urlPath string, port int, httpC
 }
 
 func (eurekaInstance ApplicationInstance) Register() error {
-	instance := eureka.CreateInstance(eurekaInstance.appName, getHostname(eurekaInstance.instanceId), eurekaInstance.instanceId, eurekaInstance.port)
+	instance, err := eureka.CreateInstance(eurekaInstance.appName, getHostname(eurekaInstance.instanceId), eurekaInstance.instanceId, eurekaInstance.port)
+	if err != nil {
+		return errors.Wrap(err, "failed to create an Eureka instance")
+	}
 	xmlString, err := xml.Marshal(instance)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert instance object to xml")
@@ -121,7 +124,7 @@ func (eurekaInstance ApplicationInstance) CancelInstance() error {
 func (eurekaInstance ApplicationInstance) StartHeartbeats(intervalInSeconds time.Duration) {
 	go func() {
 		for {
-			eurekaInstance.Heartbeat()
+			eurekaInstance.Heartbeat() //todo do something with the error from the heartbeat
 			<-time.After(intervalInSeconds * time.Second)
 		}
 	}()

@@ -28,7 +28,7 @@ func main() {
 		panic(err)
 	}
 	fmt.Println("sent heartbeat")
-	time.Sleep(90 * time.Second)
+	time.Sleep(30 * time.Second)
 	fmt.Println("retrieving all apps")
 	applications, err := eurekaClient.GetAllApps()
 	if err != nil {
