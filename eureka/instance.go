@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"github.com/Piszmog/eurekaclient/net"
 	"github.com/pkg/errors"
-	"strconv"
 	"strings"
 )
 
@@ -72,22 +71,34 @@ type LeaseInfo struct {
 	ServiceUpTimestamp    int `xml:"serviceUpTimestamp"`
 }
 
-func CreateInstance(appName, hostname, instanceId string, port int) (*Instance, error) {
+type RegistryInstance struct {
+	AppName    string
+	Port       int
+	SecurePort int
+	//HomePagePath    string
+	//StatusPagePath  string
+	//HealthCheckPath string
+}
+
+func CreateInstance(instanceId string, instance RegistryInstance) (*Instance, error) {
 	ipAddress, err := net.FindFirstNonLoopBackIPAddress()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to find an IP address")
 	}
-	// todo - port, secure port, countryId, how to set homepage/status page, healthcheck page
+	appName := instance.AppName
+	hostname := getHostname(instanceId)
 	return &Instance{
 		HostName:         hostname,
-		Port:             port,
+		Port:             instance.Port,
 		Status:           Up,
 		IPAddress:        ipAddress.String(),
-		VIPAddress:       appName,
-		SecureVIPAddress: appName,
+		VIPAddress:       strings.ToLower(appName),
+		SecureVIPAddress: strings.ToLower(appName),
 		Application:      strings.ToUpper(appName),
 		InstanceId:       instanceId,
-		HomePageURL:      "http://" + hostname + ":" + strconv.Itoa(port),
+		//HomePageURL:      instance.HomePagePath,
+		//StatusPageURL:    instance.StatusPagePath,
+		//HealthCheckURL:   instance.HealthCheckPath,
 		DataCenterInfo: DataCenterInfo{
 			Name: MyOwn,
 		},
@@ -96,4 +107,8 @@ func CreateInstance(appName, hostname, instanceId string, port int) (*Instance, 
 			DurationInSecs:        90,
 		},
 	}, nil
+}
+
+func getHostname(instanceId string) string {
+	return instanceId[:strings.IndexByte(instanceId, ':')]
 }

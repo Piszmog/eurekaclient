@@ -12,9 +12,13 @@ import (
 func main() {
 	httpClient := httpclient.CreateDefaultHttpClient()
 	fmt.Println("registering app")
-	appInstance, _ := service.CreateApplicationInstance("http://localhost:8761", "testapp", "", 8080, httpClient)
+	instance := eureka.RegistryInstance{
+		AppName:    "demo-client",
+		Port:       8080,
+		SecurePort: 443,
+	}
+	appInstance, err := service.Register("http://localhost:8761/eureka/apps", instance, httpClient)
 	eurekaClient := client.CreateLocalClient("http://localhost:8761", httpClient)
-	err := appInstance.Register()
 	if err != nil {
 		panic(err)
 	}
@@ -37,7 +41,7 @@ func main() {
 	fmt.Printf("Response %+v\n", applications)
 	time.Sleep(2 * time.Second)
 	fmt.Println("retrieving instances")
-	application, err := eurekaClient.GetAppInstances("testapp")
+	application, err := eurekaClient.GetAppInstances("demo-client")
 	if err != nil {
 		panic(err)
 	}

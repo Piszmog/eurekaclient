@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/xml"
+	"fmt"
 	"github.com/Piszmog/eurekaclient/eureka"
 	"github.com/pkg/errors"
 	"net/http"
@@ -17,7 +18,6 @@ const (
 )
 
 type EurekaInstance interface {
-	Register() error
 	Heartbeat() error
 	UpdateStatus(statusType eureka.StatusType) error
 	CancelInstance() error
@@ -26,48 +26,38 @@ type EurekaInstance interface {
 type ApplicationInstance struct {
 	baseUrl    string
 	appName    string
-	port       int
 	instanceId string
 	httpClient *http.Client
 }
 
-func CreateApplicationInstance(baseUrl, appName, urlPath string, port int, httpClient *http.Client) (*ApplicationInstance, error) {
+func Register(eurekaURL string, registryInstance eureka.RegistryInstance, httpClient *http.Client) (*ApplicationInstance, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to retrieve hostname of application")
 	}
-	eurekaURLPath := urlPath
-	if len(urlPath) == 0 {
-		eurekaURLPath = "/eureka/apps"
-	}
-	return &ApplicationInstance{
-		baseUrl:    baseUrl + eurekaURLPath,
-		appName:    strings.ToUpper(appName),
-		port:       port,
-		instanceId: hostname + ":" + appName,
-		httpClient: httpClient,
-	}, nil
-}
-
-func (eurekaInstance ApplicationInstance) Register() error {
-	instance, err := eureka.CreateInstance(eurekaInstance.appName, getHostname(eurekaInstance.instanceId), eurekaInstance.instanceId, eurekaInstance.port)
+	appName := strings.ToLower(registryInstance.AppName)
+	instanceId := hostname + ":" + appName
+	instance, err := eureka.CreateInstance(instanceId, registryInstance)
 	if err != nil {
-		return errors.Wrap(err, "failed to create an Eureka instance")
+		return nil, errors.Wrap(err, "failed to create an instance to register with Eureka")
 	}
 	xmlString, err := xml.Marshal(instance)
 	if err != nil {
-		return errors.Wrap(err, "failed to convert instance object to xml")
+		return nil, errors.Wrap(err, "failed to convert instance object to xml")
 	}
-	resp, err := eurekaInstance.httpClient.Post(eurekaInstance.baseUrl+"/"+eurekaInstance.appName,
-		XmlHeader,
-		strings.NewReader(string(xmlString)))
+	resp, err := httpClient.Post(eurekaURL+"/"+appName, XmlHeader, strings.NewReader(string(xmlString)))
 	if err != nil {
-		return errors.Wrap(err, "failed to register instance with eureka")
+		return nil, errors.Wrap(err, "failed to register instance with eureka")
 	}
 	if resp.StatusCode != 204 {
-		return errors.Errorf("failed to register instance with eureka. Status code %d", resp.StatusCode)
+		return nil, errors.Errorf("failed to register instance with eureka. Status code %d", resp.StatusCode)
 	}
-	return nil
+	return &ApplicationInstance{
+		baseUrl:    eurekaURL,
+		appName:    strings.ToUpper(appName),
+		instanceId: instanceId,
+		httpClient: httpClient,
+	}, nil
 }
 
 func (eurekaInstance ApplicationInstance) Heartbeat() error {
@@ -124,12 +114,12 @@ func (eurekaInstance ApplicationInstance) CancelInstance() error {
 func (eurekaInstance ApplicationInstance) StartHeartbeats(intervalInSeconds time.Duration) {
 	go func() {
 		for {
-			eurekaInstance.Heartbeat() //todo do something with the error from the heartbeat
+			fmt.Printf("Sent heart beat at %s\n", time.Now())
+			err := eurekaInstance.Heartbeat() //todo do something with the error from the heartbeat
+			if err != nil {
+				fmt.Println("failed to send a heartbeat")
+			}
 			<-time.After(intervalInSeconds * time.Second)
 		}
 	}()
-}
-
-func getHostname(instanceId string) string {
-	return instanceId[:strings.IndexByte(instanceId, ':')]
 }
