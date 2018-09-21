@@ -17,8 +17,12 @@ func main() {
 		Port:       8080,
 		SecurePort: 443,
 	}
-	appInstance, err := service.Register("http://localhost:8761/eureka/apps", instance, httpClient)
-	eurekaClient := client.CreateLocalClient("http://localhost:8761", httpClient)
+	appInstance, err := service.Register("http://localhost:8761", "/eureka/apps", instance, httpClient)
+	eurekaClient := client.EurekaClient{
+		BaseUrl:       "http://localhost:8761",
+		EurekaAPIPath: "/eureka/apps",
+		HttpClient:    httpClient,
+	}
 	if err != nil {
 		panic(err)
 	}
@@ -26,12 +30,22 @@ func main() {
 	defer deleteApp(appInstance)
 	time.Sleep(3 * time.Second)
 	fmt.Println("sending heartbeat")
-	//err = appInstance.Heartbeat()
-	appInstance.StartHeartbeats(10)
+	err = appInstance.Heartbeat()
+	fmt.Println("sent heartbeat")
+	fmt.Println("sending heartbeats every 10 seconds")
+	errs := make(chan error, 10)
+	defer close(errs)
+	appInstance.StartHeartbeats(10, errs)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("sent heartbeat")
+	// custom way to handle any errors from heartbeats
+	go func() {
+		for err := range errs {
+			fmt.Printf("a heartbeat failed. %v\n", err)
+		}
+	}()
+	fmt.Println("let heartbeats run for 30 seconds")
 	time.Sleep(30 * time.Second)
 	fmt.Println("retrieving all apps")
 	applications, err := eurekaClient.GetAllApps()

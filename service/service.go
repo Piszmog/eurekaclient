@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/xml"
-	"fmt"
 	"github.com/Piszmog/eurekaclient/eureka"
 	"github.com/pkg/errors"
 	"net/http"
@@ -24,36 +23,37 @@ type EurekaInstance interface {
 }
 
 type ApplicationInstance struct {
-	baseUrl    string
+	eurkeaURL  string
 	appName    string
 	instanceId string
 	httpClient *http.Client
 }
 
-func Register(eurekaURL string, registryInstance eureka.RegistryInstance, httpClient *http.Client) (*ApplicationInstance, error) {
+func Register(baseURL, eurekaAPIPath string, registryInstance eureka.RegistryInstance, httpClient *http.Client) (*ApplicationInstance, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to retrieve hostname of application")
+		return nil, errors.Wrapf(err, "failed to retrieve hostname of application %s", registryInstance.AppName)
 	}
 	appName := strings.ToLower(registryInstance.AppName)
 	instanceId := hostname + ":" + appName
 	instance, err := eureka.CreateInstance(instanceId, registryInstance)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create an instance to register with Eureka")
+		return nil, errors.Wrapf(err, "failed to create an instance of %s to register with Eureka", registryInstance.AppName)
 	}
 	xmlString, err := xml.Marshal(instance)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert instance object to xml")
+		return nil, errors.Wrapf(err, "failed to convert instance object to xml. Instance: %+v", instance)
 	}
-	resp, err := httpClient.Post(eurekaURL+"/"+appName, XmlHeader, strings.NewReader(string(xmlString)))
+	fullURL := baseURL + eurekaAPIPath
+	resp, err := httpClient.Post(fullURL+"/"+appName, XmlHeader, strings.NewReader(string(xmlString)))
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to register instance with eureka")
+		return nil, errors.Wrapf(err, "failed to register an instance of %s with eureka", registryInstance.AppName)
 	}
 	if resp.StatusCode != 204 {
-		return nil, errors.Errorf("failed to register instance with eureka. Status code %d", resp.StatusCode)
+		return nil, errors.Errorf("failed to register an instance of %s with eureka. Status code %d", registryInstance.AppName, resp.StatusCode)
 	}
 	return &ApplicationInstance{
-		baseUrl:    eurekaURL,
+		eurkeaURL:  fullURL,
 		appName:    strings.ToUpper(appName),
 		instanceId: instanceId,
 		httpClient: httpClient,
@@ -62,62 +62,61 @@ func Register(eurekaURL string, registryInstance eureka.RegistryInstance, httpCl
 
 func (eurekaInstance ApplicationInstance) Heartbeat() error {
 	request, err := http.NewRequest(Put,
-		eurekaInstance.baseUrl+"/"+eurekaInstance.appName+"/"+eurekaInstance.instanceId,
+		eurekaInstance.eurkeaURL+"/"+eurekaInstance.appName+"/"+eurekaInstance.instanceId,
 		nil)
 	if err != nil {
-		return errors.Wrap(err, "failed to create heartbeat request")
+		return errors.Wrapf(err, "failed to create heartbeat request for application %s", eurekaInstance.instanceId)
 	}
 	resp, err := eurekaInstance.httpClient.Do(request)
 	if err != nil {
-		return errors.Wrap(err, "failed to send heartbeat to eureka")
+		return errors.Wrapf(err, "failed to send heartbeat for %s to eureka", eurekaInstance.instanceId)
 	}
 	if resp.StatusCode != 200 {
-		return errors.Errorf("failed to send heartbeat. Status code: %d", resp.StatusCode)
+		return errors.Errorf("failed to send heartbeat for %s. Status code: %d", eurekaInstance.instanceId, resp.StatusCode)
 	}
 	return nil
 }
 
 func (eurekaInstance ApplicationInstance) UpdateStatus(statusType eureka.StatusType) error {
 	request, err := http.NewRequest(Put,
-		eurekaInstance.baseUrl+"/"+eurekaInstance.appName+"/"+eurekaInstance.instanceId+"/status?value="+string(statusType),
+		eurekaInstance.eurkeaURL+"/"+eurekaInstance.appName+"/"+eurekaInstance.instanceId+"/status?value="+string(statusType),
 		nil)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create a request to update status to %v", statusType)
+		return errors.Wrapf(err, "failed to create a request to update status of %s to %v", eurekaInstance.instanceId, statusType)
 	}
 	resp, err := eurekaInstance.httpClient.Do(request)
 	if err != nil {
-		return errors.Wrapf(err, "failed to update status to %v", statusType)
+		return errors.Wrapf(err, "failed to update status if to %v", eurekaInstance.instanceId, statusType)
 	}
 	if resp.StatusCode != 200 {
-		return errors.Errorf("failed to update status to %v. Received status %d", statusType, resp.StatusCode)
+		return errors.Errorf("failed to update status of %s to %v. Received status %d", eurekaInstance.instanceId, statusType, resp.StatusCode)
 	}
 	return nil
 }
 
 func (eurekaInstance ApplicationInstance) CancelInstance() error {
 	request, err := http.NewRequest(Delete,
-		eurekaInstance.baseUrl+"/"+eurekaInstance.appName+"/"+eurekaInstance.instanceId,
+		eurekaInstance.eurkeaURL+"/"+eurekaInstance.appName+"/"+eurekaInstance.instanceId,
 		nil)
 	if err != nil {
-		return errors.Wrap(err, "failed to create request to cancel instance")
+		return errors.Wrapf(err, "failed to create request to cancel instance %s", eurekaInstance.instanceId)
 	}
 	resp, err := eurekaInstance.httpClient.Do(request)
 	if err != nil {
-		return errors.Wrap(err, "failed to cancel instance")
+		return errors.Wrapf(err, "failed to cancel instance %s", eurekaInstance.instanceId)
 	}
 	if resp.StatusCode != 200 {
-		return errors.Errorf("failed to cancel  Received status %d", resp.StatusCode)
+		return errors.Errorf("failed to cancel %s. Received status %d", eurekaInstance.instanceId, resp.StatusCode)
 	}
 	return nil
 }
 
-func (eurekaInstance ApplicationInstance) StartHeartbeats(intervalInSeconds time.Duration) {
+func (eurekaInstance ApplicationInstance) StartHeartbeats(intervalInSeconds time.Duration, errs chan error) {
 	go func() {
 		for {
-			fmt.Printf("Sent heart beat at %s\n", time.Now())
-			err := eurekaInstance.Heartbeat() //todo do something with the error from the heartbeat
+			err := eurekaInstance.Heartbeat()
 			if err != nil {
-				fmt.Println("failed to send a heartbeat")
+				errs <- errors.Wrapf(err, "failed to send a heartbeat for instance %s", eurekaInstance.instanceId)
 			}
 			<-time.After(intervalInSeconds * time.Second)
 		}

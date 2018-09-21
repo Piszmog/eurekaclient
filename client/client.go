@@ -14,21 +14,15 @@ type Eureka interface {
 }
 
 type EurekaClient struct {
-	baseUrl    string
-	httpClient *http.Client
-}
-
-func CreateLocalClient(baseUrl string, httpClient *http.Client) *EurekaClient {
-	return &EurekaClient{
-		baseUrl:    baseUrl,
-		httpClient: httpClient,
-	}
+	BaseUrl       string
+	EurekaAPIPath string
+	HttpClient    *http.Client
 }
 
 func (client EurekaClient) GetAllApps() (*eureka.Applications, error) {
-	resp, err := client.httpClient.Get(client.baseUrl + "/eureka/apps")
+	resp, err := client.HttpClient.Get(client.BaseUrl + client.EurekaAPIPath)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to retrieve all apps")
+		return nil, errors.Wrap(err, "failed to retrieve all apps from eureka")
 	}
 	if resp.StatusCode != 200 {
 		return nil, errors.Errorf("failed to get all apps. Received status %d", resp.StatusCode)
@@ -44,12 +38,12 @@ func (client EurekaClient) GetAllApps() (*eureka.Applications, error) {
 }
 
 func (client EurekaClient) GetAppInstances(appName string) (*eureka.Application, error) {
-	resp, err := client.httpClient.Get(client.baseUrl + "/eureka/apps/" + strings.ToUpper(appName))
+	resp, err := client.HttpClient.Get(client.BaseUrl + client.EurekaAPIPath + "/" + strings.ToUpper(appName))
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to retrieve app instances")
+		return nil, errors.Wrapf(err, "failed to retrieve instances of application %s", appName)
 	}
 	if resp.StatusCode != 200 {
-		return nil, errors.Errorf("failed to get all apps. Received status %d", resp.StatusCode)
+		return nil, errors.Errorf("failed to get all instances of %s. Received status %d", appName, resp.StatusCode)
 	}
 	defer resp.Body.Close()
 	application := &eureka.Application{}
