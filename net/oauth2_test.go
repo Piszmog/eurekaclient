@@ -35,22 +35,22 @@ const (
 func TestCreateCloudClient(t *testing.T) {
 	os.Setenv(cfservices.VCAPServices, vcapServices)
 	defer os.Unsetenv(cfservices.VCAPServices)
-	configClient, err := CreateCloudClient()
+	oauthClients, err := CreateCloudClient()
 	if err != nil {
-		t.Errorf("failed to create cloud client with error %v", err)
+		t.Errorf("failed to create oauth client with error %v", err)
 	}
-	if configClient == nil {
-		t.Error("failed to create cloud client")
+	if oauthClients == nil {
+		t.Error("failed to create oauth client")
 	}
 }
 
 func TestCreateCloudClientWhenENVNotSet(t *testing.T) {
-	configClient, err := CreateCloudClient()
+	oauthClients, err := CreateCloudClient()
 	if err == nil {
 		t.Error("expected error when env is not set")
 	}
-	if configClient != nil {
-		t.Error("created cloud client when env is not set")
+	if oauthClients != nil {
+		t.Error("created oauth client when env is not set")
 	}
 }
 
